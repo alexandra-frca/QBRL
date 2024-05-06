@@ -1,8 +1,10 @@
 from __future__ import annotations
 from src.utils import df_binary_str_filter, product_dict, get_string_elems
-from qiskit import ClassicalRegister, QuantumRegister, QuantumCircuit
+from qiskit import ClassicalRegister, QuantumRegister, QuantumCircuit, transpile
 from src.networks.bn import BayesianNetwork as BN
-from qiskit.providers.aer import QasmSimulator
+# CHANGED
+# from qiskit.providers.aer import QasmSimulator
+from qiskit_aer import Aer
 from math import log, ceil
 from typing import Union
 from tqdm import tqdm
@@ -279,8 +281,12 @@ class QuantumBayesianNetwork(BN):
                 circ.measure(self.qr, cr)
                 
                 # Create simulator, job and get results
-                simulator = QasmSimulator()
-                job = simulator.run(circ, shots=shots)
+                # CHANGED
+                # simulator = QasmSimulator()
+                simulator = Aer.get_backend('qasm_simulator')
+                tcirc = transpile(circ, simulator)
+                
+                job = simulator.run(tcirc, shots=shots)
                 counts = job.result().get_counts(circ)
                 
                 # If evidence needs to be checked
