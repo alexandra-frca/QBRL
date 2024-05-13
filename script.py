@@ -2,11 +2,13 @@ from concurrent.futures import ProcessPoolExecutor
 from metric_collector import run_config
 from src.utils import product_dict
 from tqdm import tqdm
+from pprint import pprint
+import sys, os
 
 # Create configurations for the experiments
-num_runs = 40 
-time = 50
-configs = {
+num_runs = 1 #40 
+time = 5 # 50
+configs0 = {
     "experiment": ["tiger", "robot", "gridworld"],
     "discount": [0.9],
     "horizon": [2],
@@ -15,7 +17,7 @@ configs = {
 }
 
 # Create list of dictionaries as product of dictionary of lists
-configs = list(product_dict(configs))
+configs = list(product_dict(configs0))
 
 # Create iterator function
 def foo(config):
@@ -23,6 +25,21 @@ def foo(config):
 
 if __name__ == "__main__":
     # Extract results from multiple runs in parallel
-    with ProcessPoolExecutor() as executor:
-        # Iterate each config
-        _ = list(tqdm(executor.map(foo, configs), total=len(configs), desc="Iterating configs", position=0, leave=False))
+    mw = 1
+    print(f"> Max workers = {mw}.")
+    print("> Configs:")
+    pprint(configs0)
+    print("__________________")
+
+    with ProcessPoolExecutor(max_workers=mw) as executor:
+        try:
+            # Iterate each config
+            _ = list(tqdm(executor.map(foo, configs),
+                          total=len(configs), 
+                          desc="Iterating configs", 
+                          position=0, 
+                          leave=False))
+        except KeyboardInterrupt:
+            executor.shutdown(wait=False, cancel_futures=True)
+            print('KeyboardInterrupt 1')
+                        
