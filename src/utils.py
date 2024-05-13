@@ -92,3 +92,27 @@ def get_avg_reward_and_std(ddn: DDN, reward_node: Id, evidence: dict[Id, Value],
     avg = np.average(rewards, weights=weights)
     std = np.sqrt(np.average((avg - rewards)**2, weights=weights))
     return avg, std
+
+##############################################
+from time import perf_counter
+
+class RelativeTimer():
+    def __init__(self):
+        self.ti = perf_counter()
+        self.reference = None
+        
+    def new(self):
+        self.ti = perf_counter()
+        
+    def stop(self):
+        tf = perf_counter()
+        Dt = tf - self.ti 
+        
+        if self.reference is None:
+            self.reference = Dt
+            print(f"> Time elapsed: {Dt*1e-3}ms.")
+            print("  (To be used as reference.)")
+        else:
+            print(f"> Time elapsed: {Dt*1e-3}ms.")
+            print(f"  ({round(self.reference/Dt,1)}x faster than the reference.)")
+        return Dt
