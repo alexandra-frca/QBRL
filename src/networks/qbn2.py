@@ -1,15 +1,18 @@
 from __future__ import annotations
 from src.utils import df_binary_str_filter, product_dict, get_string_elems
 from qiskit import ClassicalRegister, QuantumRegister, QuantumCircuit, transpile
-from qiskit.circuit.library import MCMT
+
+from src.networks.nodes import DiscreteNode
 from src.networks.bn import BayesianNetwork as BN
 # CHANGED
 # from qiskit.providers.aer import QasmSimulator
 from qiskit_aer import Aer
 from math import log, ceil
 from typing import Union
+from tqdm import tqdm
 import pandas as pd
 import numpy as np
+
 
 # Define the types
 Id = tuple[str, int]
@@ -194,7 +197,7 @@ class QuantumBayesianNetwork(BN):
         
         return circ
     
-    def grover_oracle_old(self, evidence_qvalues: dict[int, int]) -> QuantumCircuit:
+    def grover_oracle(self, evidence_qvalues: dict[int, int]) -> QuantumCircuit:
         circ = QuantumCircuit(self.qr)
         
         # Flip unset qubits
@@ -214,35 +217,6 @@ class QuantumBayesianNetwork(BN):
         # Flip unset qubits
         for q, value in evidence_qvalues.items():
             if value == 0:
-                circ.x(self.qr[q])        
-        
-        return circ
-    
-    def grover_oracle(self, evidence_qvalues: dict[int, int]) -> QuantumCircuit:
-        if self.old:
-            return self.grover_oracle_old(evidence_qvalues)
-            
-        circ = QuantumCircuit(self.qr)
-        
-        # Flip unset qubits
-        for q, value in evidence_qvalues.items():
-            if value == '0':
-                circ.x(self.qr[q])
-
-        # Phase flip evidence qubits
-        start = list(evidence_qvalues.keys())[0]
-        if len(evidence_qvalues) == 1:
-            circ.z(self.qr[start])
-        else:
-            controls = [self.qr[q] for q in evidence_qvalues]
-            
-            n = len(controls)
-            mcz= MCMT('cz',n-1,1)
-            circ.compose(mcz, qubits=controls, inplace=True)
-
-        # Flip unset qubits
-        for q, value in evidence_qvalues.items():
-            if value == '0':
                 circ.x(self.qr[q])        
         
         return circ
@@ -269,9 +243,9 @@ class QuantumBayesianNetwork(BN):
         circ.compose(self.grover_diffuser_circ, inplace=True)
         return circ
     
-    def query_circ(self, evidence_qvalues: dict[Id, int], grover_iter: int) -> QuantumCircuit:
+    def query_circ(self, cr: ClassicalRegister, evidence_qvalues: dict[Id, int], grover_iter: int) -> QuantumCircuit:
         # Build circuit
-        circ = QuantumCircuit(self.qr)#, cr)
+        circ = QuantumCircuit(self.qr, cr)
         circ.compose(self.encoding_circ, inplace=True)
         if len(evidence_qvalues) != 0:
             for _ in range(grover_iter):
@@ -279,7 +253,7 @@ class QuantumBayesianNetwork(BN):
                 
         return circ
     
-    def query_old(self, query: list[Id], evidence: dict[Id, Value], n_samples: int) -> pd.DataFrame:
+    def query(self, query: list[Id], evidence: dict[Id, Value], n_samples: int) -> pd.DataFrame:
         # Encode root node evidence values, generate circuits
         backup_pts = self.encode_evidence(evidence)
         self.encoding_circ = self.encoding()
@@ -298,20 +272,16 @@ class QuantumBayesianNetwork(BN):
             c = 1.4
             l = 1
             done = False
-            # total = 0
-            # hits = 0
             
             while not done:
-                # total +=1
                 # Update grover iterations
                 m = int(ceil(c**l))
                 grover_iter = int(np.random.randint(1, m+1))
-                '''
+                
                 # Create classical register for the measurement and quantum circuit
                 cr = ClassicalRegister(len(self.qr))
                 circ = self.query_circ(cr, evidence_qvalues, grover_iter)
                 circ.measure(self.qr, cr)
-                
                 
                 # Create simulator, job and get results
                 # CHANGED
@@ -321,10 +291,6 @@ class QuantumBayesianNetwork(BN):
                 
                 job = simulator.run(tcirc, shots=shots)
                 counts = job.result().get_counts(circ)
-                '''
-                
-                circ = self.query_circ(evidence_qvalues, grover_iter)
-                counts = run_circ(circ, Nshots = 1)
                 
                 # If evidence needs to be checked
                 done = True
@@ -336,116 +302,16 @@ class QuantumBayesianNetwork(BN):
                     evidence_measurements = {q: invbitstr[q] for q in evidence_qubits}
                     if evidence_measurements != evidence_qvalues:
                         done = False
-                        # l += 1
+                        l += 1
                     elif bitstr not in results:
-                        # hits += 1
                         results[bitstr] = 1
                     else:
-                        # hits += 1
                         results[bitstr] += 1
                 # No evidence
                 else:
                     results = counts
-                # print("> Success rate: ", 100*hits/total)
                     
         # Decode evidence values
         self.decode_evidence(backup_pts)
         
         return self.counts_to_dict(query, results)
-    
-    def optimal_m(self, a):
-        # Optimal number of Grover iterations. 
-        theta = np.arcsin(np.sqrt(a))
-        m = int(np.floor(np.pi/(4*theta)))
-        # print("> m = ", m)
-        # print("> Prob success should be: ", 100*np.sin((2*m+1)*theta)**2)
-        return m
-    
-    def qquery(self, query: list[Id], evidence: dict[Id, Value], n_samples: int, quantum = True) -> pd.DataFrame:
-        # Replace QSearch with calculation of P(e).
-        if self.old:
-            return self.query_old(query, evidence, n_samples)
-        else:
-            return self.query(query, evidence, n_samples)
-            
-        Pe = self.joint_prob(evidence)
-        # print("Pe", Pe)
-        m = self.optimal_m(Pe)
-            
-        # Encode root node evidence values, generate circuits
-        # backup_pts = self.encode_evidence(evidence)
-        self.encoding_circ = self.encoding()
-        self.grover_diffuser_circ = self.grover_diffuser()
-        
-        # Generate evidence qubit values dict
-        evidence_qvalues = self.evidence_to_qvalues(evidence)
-        evidence_qubits = sorted([j for nid in evidence for j in self.rv_qubits[nid]])
-        
-        # Define shots and number of iterations
-        results = {}
-        iterations = n_samples if len(evidence) > 0 else 1
-        shots = 1 if len(evidence) > 0 else n_samples
-        
-        # total = 0
-        # hits = 0
-        circ = self.query_circ(evidence_qvalues, m)
-        for _ in range(iterations):
-            done = False
-            
-            while not done:
-                # total +=1
-                # cr = None
-                
-                counts = run_circ(circ, Nshots = 1)
-                # print(counts)
-                # If evidence needs to be checked
-                done = True
-                if shots == 1:
-                    bitstr = list(counts.keys())[0]
-                    invbitstr = bitstr[::-1]
-                    
-                    # Check if evidence matches
-                    evidence_measurements = {q: invbitstr[q] for q in evidence_qubits}
-                    if evidence_measurements != evidence_qvalues:
-                        # print("NOT")
-                        done = False
-                    elif bitstr not in results:
-                        # print("yes")
-                        # hits += 1
-                        results[bitstr] = 1
-                    else:
-                        # print("yes")
-                        # hits += 1
-                        results[bitstr] += 1
-                # No evidence
-                else:
-                    results = counts
-        # print("> Success rate: ", 100*hits/total)
-                    
-        # Decode evidence values
-        # self.decode_evidence(backup_pts)
-        return circ
-        
-        return self.counts_to_dict(query, results)
-    
-def run_circ(circ, Nshots = 1024):
-    # Create classical register for the measurement and quantum circuit
-    cr = ClassicalRegister(circ.num_qubits)
-    qrs = circ.qregs
-    assert len(qrs)==1
-    
-    qr = qrs[0]
-    circ.add_register(cr)
-    circ.measure(qr, cr)
-    
-    # Create simulator, job and get results
-    # CHANGED
-    # simulator = QasmSimulator()
-    simulator = Aer.get_backend('qasm_simulator')
-    tcirc = transpile(circ, simulator)
-    
-    # job = simulator.run(tcirc, shots=shots)
-    job = simulator.run(tcirc, shots=Nshots)
-    counts = job.result().get_counts(tcirc)
-    return counts
-    

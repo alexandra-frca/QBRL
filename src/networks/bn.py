@@ -3,6 +3,7 @@ from src.networks.nodes import DiscreteNode
 from typing import Callable, Union
 import networkx as nx
 import pandas as pd
+from copy import deepcopy
 
 # Defining types
 Id = Union[str, tuple[str, int]]
@@ -18,7 +19,7 @@ class BayesianNetwork:
     It leverages the DiscreteNode class and implements rejection sampling for inference.
     """
 
-    def __init__(self):
+    def __init__(self, old = False):
         # The node map maps the node's ids to the node objects themselves
         self.node_dict: dict[Id, DiscreteNode] = {}
         
@@ -27,6 +28,8 @@ class BayesianNetwork:
         
         # The node queue lists the topological ordering of the nodes, for inference traversal
         self.node_queue: list[Id] = None
+        
+        self.old = old
         
     def get_node_queue(self) -> list[Id]:
         return self.node_queue
@@ -159,8 +162,8 @@ class BayesianNetwork:
             sample[node] = self.node_dict[node].get_sample(sample)
             
         return sample
-
-    def query(self, query: list[Id], evidence: dict[Id, Evidence] = None, n_samples: int = 100) -> pd.DataFrame:
+    
+    def query_old(self, query: list[Id], evidence: dict[Id, Evidence] = None, n_samples: int = 100) -> pd.DataFrame:
         """
         Applies the rejection sampling algorithm to approximate any probability distribution.
 
@@ -193,3 +196,139 @@ class BayesianNetwork:
         sample_df = sample_df.groupby(query).sum().sort_values(query).reset_index() # Group over query variables and sum over all other variables
 
         return sample_df
+
+    def query(self, query: list[Id], evidence: dict[Id, Evidence] = None, 
+              n_samples: int = 100) -> pd.DataFrame:
+        """
+        Applies the rejection sampling algorithm to approximate any probability distribution.
+
+        Arguments:
+            - query ([Id]): node ids for the random variables of the desired probability distribution.
+            - evidence ({Id: int}): values for random variables as evidence for the inference. Defaults to None.
+            - n_samples (int): number of samples to retrieve. Defaults to 100.
+
+        Return (pd.Dataframe): a dataframe that represents the inferred posterior distribution.
+        """
+        
+        if self.old:
+            return self.query_old(query, evidence, n_samples)
+        
+        samples = []
+        evidence = {} if evidence is None else evidence
+        
+        # Assign the specific values of evidence vars that are root nodes.
+        # I.e. instead of table having 2 values (0 or 1), keep only correct one. 
+        # Will be restored later.
+        backup_pts = self.encode_evidence(evidence)
+        
+        
+        # Create multiple samples
+        num_samples = 0
+        while (num_samples < n_samples):
+            # Extract sample from the BN.
+            sample = self.get_sample() 
+            # Store sample if it matches with evidence.
+            matches = [sample[name] == evidence[name] for name in evidence] 
+            if all(matches):
+                samples.append(sample)
+                num_samples += 1
+                
+        
+        self.decode_evidence(backup_pts)
+
+        # Table with 1 sample per line.
+        sample_df = pd.DataFrame(samples)
+        # Join identical samples in the same line, calculate relative frequency.
+        sample_df = sample_df.value_counts(normalize=True).to_frame("Prob") 
+        # Join samples whose query variables are the same, sum over others.
+        sample_df = sample_df.groupby(query).sum()
+        # Order and make into enumerated dataframe. 
+        sample_df = sample_df.sort_values(query).reset_index()
+
+        return sample_df
+        
+    def joint_prob(self, d):
+        P = 1
+        for node in list(d.keys()):
+            P *= self.cond_prob(node, d)  
+        return P
+            
+    def cond_prob(self, node, d):
+        val = d[node]
+        ids = list(d.keys())
+        vals = [d[var] for var in ids]
+        parents = self.get_parents(node)
+        
+        # If a parent with higher topological order is specified, no need for 
+        # other. Can find path to calculate probability without it.
+        # Remember no loops. If nodes with same order, index is arbitrary
+        absent_parents = [parent for parent in parents if parent not in d]
+        present_parents = [parent for parent in parents if parent in d]
+        for ap in absent_parents:
+            for parent in present_parents:
+                if parents.index(ap) > parents.index(parent):       
+                    absent_parents.remove(ap)
+        if not absent_parents:
+            # All parent values specified.
+            pvs = [(p,v) for (p,v) in zip(ids, vals) if p in parents]
+            if pvs:
+                # Split into list of parent ids, list of parent values.
+                ps, pvals = map(list, zip(*pvs))
+            else:
+              ps, pvals = [], []
+            
+            cp = self.cond_prob_aux(node, val, parents, pvals)
+            return cp
+        else:
+            # Need recursivity to consider possible parent values.
+            tparents = [node for node in self.node_queue if node in parents]
+            parent = tparents[0]
+            vals = [0, 1]
+            
+            ds = [deepcopy(d) for val in vals]
+            for d, val in zip(ds,vals):
+                d[parent] = val
+                
+            ps = [self.cond_prob(parent, d) for d in ds]
+            
+            return sum([p*self.cond_prob(node, d) for p,d in zip(ps, ds)])
+    
+            
+    
+    def cond_prob_aux(self, node, nval, parents, pvals):
+        # P(node|parents) where all parent values specified. Works for no parents.
+        df = self.get_pt(node)
+        lnodes = parents + [node]
+        lvals = pvals + [nval]
+        cP = df.loc[(df[lnodes] == lvals).all(axis = 1), 'Prob']
+        cP = cP.iat[0]
+        return cP
+        
+    '''
+    def joint_prob(self, d: dict[Id, Value]):
+        ids = list(d.keys())
+        vals = [d[var] for var in ids]
+        P = 1
+        for node, val in zip(ids, vals):
+            parents = self.get_parents(node)
+            pvs = [(p,v) for (p,v) in zip(ids, vals) if p in parents]
+            
+            if pvs:
+              ps, pvals = map(list, zip(*pvs))
+            else:
+              ps, pvals = [], []
+            
+            cp = self.cond_prob(node, val, ps, pvals)
+            # print("* ", node, ps, cp)
+            
+            P *= cp
+        return P
+    
+    def cond_prob(self, node, nval, parents, pvals):
+        # P(node|parents) 
+        df = self.get_pt(node)
+        lnodes = parents + [node]
+        lvals = pvals + [nval]
+        cP = df.loc[(df[lnodes] == lvals).all(axis = 1), 'Prob']
+        return cP.iat[0]
+    '''

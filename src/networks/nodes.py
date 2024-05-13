@@ -16,11 +16,13 @@ class DiscreteNode:
     # TODO: change value space definition to be a set instead of a list.
     """
 
-    def __init__(self, node_id: Id, node_type: str, value_space: list[Value], pt: pd.DataFrame = None):
+    def __init__(self, node_id: Id, node_type: str, value_space: list[Value], 
+                 pt: pd.DataFrame = None, old = False):
         self.id = node_id
         self.type = node_type
         self.value_space = value_space
         self.pt = pt
+        self.old = old
 
     def get_id(self) -> Id:
         return self.id
@@ -74,8 +76,8 @@ class DiscreteNode:
         values = self.get_value_space()
         probs = [int(value==i) for i in range(len(values))]
         self.pt = pd.DataFrame({self.get_id(): values, "Prob": probs})
-
-    def get_sample(self, sample: dict[Id, Value]) -> Value:
+        
+    def get_sample_old(self, sample: dict[Id, Value]) -> Value:
         """
         Samples this node via the direct sampling algorithm
         given previous acquired samples (of parent nodes).
@@ -103,3 +105,32 @@ class DiscreteNode:
                 break
 
         return r
+
+    def get_sample(self, sample: dict[Id, Value]) -> Value:
+        """
+        Samples this node via the direct sampling algorithm
+        given previous acquired samples (of parent nodes).
+        
+        TODO:
+            -> Check if every parent node is in the input sample.
+            -> Guarantee that the filtered df represents a probability distribution.
+        """
+        if self.old:
+            return self.get_sample_old(sample)
+            
+        # Get node's PT and name.
+        df = self.get_pt()
+        id = self.get_id()
+
+        # Before: but name should never be in sample already?
+        assert id not in list(sample.keys())
+        
+        # Remove vars that are not parents.
+        sample = {k: v for k, v in sample.items() if k in df}
+        # Remove rows with wrong evidence values.
+        for name in sample:
+            df = df.loc[df[name] == sample[name]]
+            
+        r = np.random.choice(df[id], p = df["Prob"])
+        return r
+    
