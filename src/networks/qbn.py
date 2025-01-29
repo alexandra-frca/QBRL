@@ -361,13 +361,16 @@ class QuantumBayesianNetwork(BN):
         # print("> Prob success should be: ", 100*np.sin((2*m+1)*theta)**2)
         return m
     
-    def qquery(self, query: list[Id], evidence: dict[Id, Value], n_samples: int, quantum = True) -> pd.DataFrame:
-        # Replace QSearch with calculation of P(e).
+    def qquery(self, query: list[Id], evidence: dict[Id, Value], n_samples: int, qiskit = False) -> pd.DataFrame:
+        # qiskit: whether to run the circuits using Qiskit, or simulate them 
+        # classically.
+        
         if self.old:
             return self.query_old(query, evidence, n_samples)
-        else:
+        if not qiskit:
             return self.query(query, evidence, n_samples)
-            
+        
+        # Replace QSearch with calculation of P(e).
         Pe = self.joint_prob(evidence)
         # print("Pe", Pe)
         m = self.optimal_m(Pe)

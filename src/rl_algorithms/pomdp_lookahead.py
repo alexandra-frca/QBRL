@@ -58,7 +58,7 @@ def q_value(ddn: DDN, tree: Tree, belief_state: BeliefState, n_samples: int) -> 
             # Calculate probability of observation
             observation = child.get_attribute("observation")
             prob = df_dict_filter(observation_df, observation)
-            prob = float(prob["Prob"]) if len(prob) > 0 else 0.0
+            prob = float(prob["Prob"].iloc[0]) if len(prob) > 0 else 0.0
             
             # Recursive q-value calculation
             new_belief = belief_update(ddn, belief_state, action, observation, n_samples)

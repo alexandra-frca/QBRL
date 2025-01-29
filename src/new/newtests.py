@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue May  7 13:58:36 2024
-
-@author: alexa
+Testing alterations to Gil's code. 
 """
+from copy import deepcopy
 
 from src.networks.bn import BayesianNetwork
 from src.networks.qbn import QuantumBayesianNetwork
 from src.networks.nodes import DiscreteNode
 from src.utils import RelativeTimer
 
-
+# Testing the queries to a simple Bayesian network and comparing the speed of 
+# the old implementation with the new. 
 
 def sprinkler_pts(simpler = False):
     data = {}
@@ -38,7 +38,7 @@ def sprinkler_example(old = False, simpler = False):
     
     edges = [("Cloudy", "Sprinkler")]
     if not simpler:
-        edges.extend([("Cloudy", "Sprinkler"), 
+        edges.extend([#("Cloudy", "Sprinkler"), 
                       ("Cloudy", "Rain"), 
                       ("Sprinkler", "WetGrass"), 
                       ("Rain", "WetGrass")])
@@ -58,36 +58,11 @@ def create_bn(nodes, edges, data, quantum, old = False):
         bn.add_pt(name, data[name])
     return bn
 
-'''
-specs = sprinkler_example()
-bn = create_bn(*specs, quantum = False)
-bn.initialize()
-bn.query(query=["Cloudy", "WetGrass"], evidence={"Cloudy": 1}, n_samples=1)
-import pandas as pd 
-
-df = pd.DataFrame({'A': [0, 1, 1],
-                   'B': [1, 0, 0],
-                   'C': [1, 1, 0],
-                   'Prob': [0.3, 0.4, 0.3]})
-print(df)
-print("...........")
-df = df.groupby(['A', 'B']).sum()
-print(df)
-
-
-'''
-
 def init_problem_bn(old = False, quantum = False, simpler = False):
     specs = sprinkler_example(old = old, simpler = simpler)
     bn = create_bn(*specs, quantum = quantum, old = old)
     bn.initialize()
     return bn
-
-def test_joint_prob():
-    bn = init_problem_bn()
-    # Should be: 0.5*0.8*0.01 = 0.04
-    jp = bn.joint_prob({"Cloudy": 1, "Rain": 1, "WetGrass": 0})
-    print(jp)
 
 def test_qquery(simpler = False):
     if simpler:
@@ -105,29 +80,30 @@ def test_qquery(simpler = False):
                      evidence=ev, 
                      n_samples=50)
 
-    # print(q)
+    print(q)
 
-def run_timed(rt, old, quantum = True, N = 1):
-    bn = init_problem_bn(old, quantum)
+def run_timed(rt, old, qiskit, Nruns = 1, Nsamples = 10):
+    bn = init_problem_bn(old, quantum = True)
     rt.new()
-    for i in range(N):
+    for i in range(Nruns):
         # q = bn.query(query=["Cloudy", "Rain", "Sprinkler", "WetGrass"], evidence={}, n_samples=1000)
         q = bn.qquery(query=["WetGrass"], 
                        evidence={"Sprinkler": 0, "Rain": 1, "Cloudy":0}, 
-                       n_samples=200)
+                       n_samples=Nsamples, qiskit = qiskit)
         # print(q)
     rt.stop()
     
-def test_speeds(): 
+def test_speeds(Nruns, Nsamples): 
     rt = RelativeTimer()
-    for old in [True, False]:
-        run_timed(rt, old)
+    print("> Testing speed for quantum Bayesian network queries.")
+    tests = ["Old", "New", "New (no Qiskit)"]
+    for s in tests:
+        print(f"* {s} code")
+        old = True if s=="Old" else False
+        qiskit = False if s=="New (no Qiskit)" else True
+        run_timed(rt, old, qiskit, Nruns, Nsamples)
 
-# test_qquery()
-# run_timed(rt, False, quantum = True)
-test_speeds()
-
-from copy import deepcopy
+# Joint probability calculations (for calculating P(e), the amplitude).
 
 def joint_prob(bn, d):
     P = 1
@@ -135,7 +111,6 @@ def joint_prob(bn, d):
         P *= cond_prob(bn, node, d)  
     return P
         
-dicts = []
 def cond_prob(bn, node, d):
     # print(node, d)
     val = d[node]
@@ -180,10 +155,6 @@ def cond_prob(bn, node, d):
         # print(d)
         
         return sum([p*cond_prob(bn, node, d) for p,d in zip(ps, ds)])
-    
-
-
-        
 
 def cond_prob_aux(bn, node, nval, parents, pvals):
     # P(node|parents) where all parent values specified. Works for no parents.
@@ -194,18 +165,19 @@ def cond_prob_aux(bn, node, nval, parents, pvals):
     cP = cP.iat[0]
     return cP
 
-def test_joint_prob2():
+def test_joint_prob(ev):
     bn = init_problem_bn(old = False, quantum = True, simpler = False)
-    ev = {"Rain": 0, "Sprinkler": 0}
+    # ev = {"Rain": 0, "Sprinkler": 0}
     # ev = {"Rain": 0, "Cloudy": 0, "Sprinkler": 0, "WetGrass": 0}
-    ev = {"WetGrass": 0, "Cloudy": 1}
+    # ev = {"WetGrass": 0, "Cloudy": 1}
+    # ev = {"Cloudy": 1, "Rain": 1, "WetGrass": 0}
     # print(bn.get_pt("Rain"))
     jp = joint_prob(bn, ev)
+    print("Calculated joint probability:", jp)
+
+def test_joint_prob2():
+    # Using the method of bn class (which was tested here for convenience).
+    bn = init_problem_bn()
+    # Should be: 0.5*0.8*0.01 = 0.04
+    jp = bn.joint_prob({"Cloudy": 1, "Rain": 1, "WetGrass": 0})
     print(jp)
-
-
-# test_joint_prob2()
-
-
-
-
