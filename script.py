@@ -16,6 +16,14 @@ configs0 = {
     "r_sample": [250]
 }
 
+configs0 = {
+    "experiment": ["tiger"],
+    "discount": [0.9],
+    "horizon": [2],
+    "c_sample": [5],
+    "r_sample": [250]
+}
+
 # Create list of dictionaries as product of dictionary of lists
 configs = list(product_dict(configs0))
 
