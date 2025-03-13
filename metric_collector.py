@@ -67,7 +67,10 @@ def get_metrics_per_run(ddn, tree, n_samples, reward_samples, time, quantum=Fals
             cl = get_sample_coefficients(ddn, tree, ddn.get_belief_state(), reward_samples)
             coeff = get_sample_coefficients(ddn, tree, ddn.get_belief_state(), reward_samples, True)
             ratio = get_sample_ratio(cl, coeff)
-            n_samples_ = int(np.floor(ratio * n_samples))
+            print("ratio", ratio)
+            print("\n1", n_samples, "\n")
+            n_samples_ = int(np.round(ratio * n_samples))
+            print("\n2", n_samples_, "\n")
         else:
             coeff = get_sample_coefficients(ddn, tree, ddn.get_belief_state(), reward_samples)
             n_samples_ = n_samples

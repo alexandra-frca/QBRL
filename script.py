@@ -6,8 +6,8 @@ from pprint import pprint
 import sys, os
 
 # Create configurations for the experiments
-num_runs = 1 #40 
-time = 5 # 50
+num_runs = 10
+time = 50
 configs0 = {
     "experiment": ["tiger", "robot", "gridworld"],
     "discount": [0.9],
