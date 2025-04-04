@@ -165,7 +165,7 @@ def run_config(config, num_runs, time, save = True):
         
     if save:
         timestamp = datetime.now(pytz.timezone('Japan')).strftime("%d_%m_%Y_%H_%M")
-        filename = f"datasets/results_{timestamp}.csv"
+        filename = f"results_{timestamp}.csv"
 
         # Save to datasets folder if it exists, otherwise to current folder.
         if os.path.exists('datasets') and os.path.isdir('datasets'):
