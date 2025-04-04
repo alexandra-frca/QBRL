@@ -2,19 +2,17 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 from collections import defaultdict
+import ast
 from pprint import pprint
 
-def plot_results(df, conds, unc = "std", silent = True):
+def plot_crd(df, conds = None, unc = "std", silent = True):
     df['reward_diff'] = df['q_r'] - df['r']
-    print(df.head(10))
 
     # Group runs with the same problem variables. 
     group_cols = ['experiment', 'discount', 'horizon', 'c_sample', 'r_sample']
 
     results = {}
     for key, group in df.groupby(group_cols):
-        print("key", key)
-
         key = dict_to_str(key, group_cols)
 
         ts = group['t'].unique()
@@ -22,26 +20,26 @@ def plot_results(df, conds, unc = "std", silent = True):
 
         # Collect reward differences for each time t
         for t, sub_group in group.groupby('t'):
-            reward_diffs_by_time[t] = sub_group['reward_diff'].tolist()  # List of q_r - r values at time t
-
-        # Convert to lists in order of time_series
+            reward_diffs_by_time[t] = sub_group['reward_diff'].tolist()  
+            
         reward_diffs_list = [reward_diffs_by_time[t] for t in ts]
 
-        # Store the result
         cr = accumulate(reward_diffs_list)
-
+        
+        '''
         print("Number of runs: ", len(cr[0]))
         print("> Cumulative reward differences: ")
         for i,l in enumerate(cr): 
             print(f"t={i} (average = {round(np.mean(l), 2)}): ", list(round(x, 1) for x in l))
+        '''
         avgs, stds = get_avgs_stds(cr)
-        print("_______________")
-        print(avgs)
-        print("_______________")
         results[key] = (ts, avgs, stds)
         # results[key_str] = (time_series, reward_diffs_list)
 
-    plot(results, conds)
+    if conds is None: 
+        plot_crd_aux(results)
+    else:
+        plot_crd_aux_conditional(results, conds)
 
     if not silent:
         for key, (times, avgs, stds) in results.items():
@@ -50,6 +48,57 @@ def plot_results(df, conds, unc = "std", silent = True):
             print(f"Times: {times}")
             print(f"Average reward Differences by Time: {avgs}")
             print()
+
+def plot_crd_aux(results):
+    plt.figure(figsize=(10, 6))
+
+    for key, (times, avgs, stds) in results.items():
+        d = ast.literal_eval(key[6:])
+        label = f"c_sample = {d['c_sample']}" 
+        plt.plot(times, avgs, label = label)
+        plt.fill_between(
+            times,
+            avgs - stds,
+            avgs + stds,
+            alpha=0.2
+        )
+
+    # Formatting the plot
+    plt.xlabel('Time (t)')
+    plt.ylabel('Cumulative Reward Difference')
+    plt.title('Cumulative Reward Difference Over Time')
+    plt.legend(loc='best', fontsize='small')
+
+    plt.show()
+
+def plot_crd_aux_conditional(results, conds):
+    plt.figure(figsize=(10, 6))
+
+    first = True
+    for key, (times, avgs, stds) in results.items():
+        d = ast.literal_eval(key[6:])
+        if all(d[key] == conds[key] for key in conds):
+            if first:
+                # print("> Plotting: ")
+                # pprint(d)
+                first = False
+
+            label = f"c_sample = {d['c_sample']}" 
+            plt.plot(times, avgs, label=label)
+            plt.fill_between(
+                times,
+                avgs - stds,
+                avgs + stds,
+                alpha=0.2
+            )
+
+    # Formatting the plot
+    plt.xlabel('Time (t)')
+    plt.ylabel('Cumulative Reward Difference')
+    plt.title('Cumulative Reward Difference Over Time')
+    plt.legend(loc='best', fontsize='small')
+
+    plt.show()
 
 def dict_to_str(key, names):
     '''
@@ -63,14 +112,12 @@ def dict_to_str(key, names):
 def convert_numpy_types(l):
     l2 = []
     for v in l:
-        # Convert np.int64 and np.float64 to Python int and float
         if isinstance(v, np.int64):
             l2.append(int(v))
         elif isinstance(v, np.float64):
             l2.append(float(v))
         else:
             l2.append(v)
-        # You can add more type checks if necessary (e.g. for np.float32, np.int32, etc.)
     return l2
 
 def accumulate(data):
@@ -90,37 +137,6 @@ def get_avgs_stds(list_of_lists):
     avgs = np.mean(data, axis=1)
     stds = np.std(data, axis=1)
     return avgs, stds
-
-def plot(results, conds):
-    plt.figure(figsize=(10, 6))
-
-    first = True
-    for key, (times, avgs, stds) in results.items():
-        import ast
-        d = ast.literal_eval(key[6:])
-        if all(d[key] == conds[key] for key in conds):
-            if first:
-                print("> Plotting: ")
-                pprint(d)
-                first = False
-
-            label = f"c_sample = {d["c_sample"]}" 
-            plt.plot(times, avgs, label=label)
-            plt.fill_between(
-                times,
-                avgs - stds,
-                avgs + stds,
-                alpha=0.2
-            )
-
-    # Formatting the plot
-    plt.xlabel('Time (t)')
-    plt.ylabel('Cumulative Reward Difference')
-    plt.title('Cumulative Reward Difference Over Time')
-    plt.legend(loc='best', fontsize='small')
-
-
-    plt.show()
 
 def get_csample_from_dictstr(dstr):
     import re
@@ -193,23 +209,11 @@ testdata2 = {
     'q_r': [0.7, 0.8, 0.5, 0.8, 0.9, 1.0],
 }
 
-pd.set_option('display.max_columns', None)
-pd.set_option('display.max_rows', None)
+# pd.set_option('display.max_columns', None)
+# pd.set_option('display.max_rows', None)
 
-df = pd.DataFrame(testdata)
-df = pd.read_csv('results_oldt.csv')
-df = df.iloc[4:]
-df = pd.read_csv('resultsg.csv')
-# df = pd.read_csv('datag.csv')
-# df = df.head(200)
-#df = pd.read_csv('results1103.csv')
-df = pd.read_csv('results1303.csv')
-df = df.iloc[20:]
-print(df)
-input()
-# print(df.head(10))
 
-print(df)
+
 '''
 df = df[
     (df['experiment'] == 'tiger') &
@@ -219,6 +223,11 @@ df = df[
     (df['run'] < 3)
 ]
 df['reward_diff'] = df['q_r'] - df['r']'''
-# print(df)
-conds = {'experiment': 'tiger', 'horizon': 2, "c_sample": 5}
-plot_results(df, conds)
+
+if __name__ == "__main__":
+    df = pd.read_csv('datasets/tiger_t=50_cs=5_nruns=70.csv')
+    df = pd.read_csv('resultsg.csv')
+    # conds = {'experiment': 'tiger', 'horizon': 2, "c_sample": 5}
+
+    plot_crd(df)
+    # plot_crd(df, conds)

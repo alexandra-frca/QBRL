@@ -56,7 +56,7 @@ def belief_update(ddn: DDN, belief_state: BeliefState, actions: dict[Id, Value],
         
         # Query the next belief-state
         evidence = {**belief_state, **actions, **observations}
-        next_belief = ddn.query(query, evidence, n_samples)
+        next_belief = ddn.query(query, evidence, n_samples, print_pe = False)
         
         # TODO: Check if there is a better way to do this
         # Reduce column time

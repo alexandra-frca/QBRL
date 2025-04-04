@@ -1,0 +1,2 @@
+experiment,discount,horizon,c_sample,r_sample,run,t,r,std,q_r,q_std,q_sample,c_l,q_l
+tiger,0.9,2,5,250,0,0,-2.9800000000000004,7.484624239065044,-1.0,0.0,7,12.056552196681267,8.514031026857609

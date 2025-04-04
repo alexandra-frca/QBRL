@@ -1,12 +1,18 @@
 from src.rl_algorithms.pomdp_lookahead import build_tree, pomdp_lookahead
 from get_ddns import get_tiger_ddn, get_robot_ddn, get_gridworld_ddn
-from src.utils import get_avg_reward_and_std, belief_update
+from src.utils import get_avg_reward_and_std, belief_update, product_dict
 from src.networks.qbn import QuantumBayesianNetwork as QBN
 from src.networks.bn import BayesianNetwork as BN
+from concurrent.futures import ProcessPoolExecutor
 from tqdm import tqdm
 import pandas as pd
 import numpy as np
-import os
+import os, pytz
+from datetime import datetime
+from tqdm import tqdm
+import  os
+import time
+from datetime import datetime
 
 
 def get_tree(ddn, horizon):
@@ -40,7 +46,6 @@ def get_sample_coefficients(ddn, tree, belief_state, n_samples, quantum=False):
             new_belief = belief_update(ddn, belief_state, action, observation, n_samples)
             new_r = get_sample_coefficients(ddn, observation_tree, new_belief, n_samples)
             r += new_r
-            
     return r
 
 
@@ -67,10 +72,10 @@ def get_metrics_per_run(ddn, tree, n_samples, reward_samples, time, quantum=Fals
             cl = get_sample_coefficients(ddn, tree, ddn.get_belief_state(), reward_samples)
             coeff = get_sample_coefficients(ddn, tree, ddn.get_belief_state(), reward_samples, True)
             ratio = get_sample_ratio(cl, coeff)
-            print("ratio", ratio)
-            print("\n1", n_samples, "\n")
+            # print("ratio", ratio)
+            # print("\n1", n_samples, "\n")
             n_samples_ = int(np.round(ratio * n_samples))
-            print("\n2", n_samples_, "\n")
+            # print("\n2", n_samples_, "\n")
         else:
             coeff = get_sample_coefficients(ddn, tree, ddn.get_belief_state(), reward_samples)
             n_samples_ = n_samples
@@ -132,7 +137,7 @@ def get_metrics(ddn, qddn, tree, config, num_runs, time):
     return r
 
 
-def run_config(config, num_runs, time):
+def run_config(config, num_runs, time, save = True):
     # Extract data from config
     name = config["experiment"]
     discount = config["discount"]
@@ -158,8 +163,45 @@ def run_config(config, num_runs, time):
     # Transform configs into dictionary for dataframe
     df = pd.DataFrame([{**config, **run_d} for run_d in run_dict])
         
-    # Append results to possibly existing dataframe
-    if os.path.isfile("results.csv"):
-        df.to_csv("results.csv", mode='a', index=False, header=False)
-    else:
-        df.to_csv("results.csv", index=False)
+    if save:
+        timestamp = datetime.now(pytz.timezone('Japan')).strftime("%d_%m_%Y_%H_%M")
+        filename = f"datasets/results_{timestamp}.csv"
+        df.to_csv(filename, index=False)
+    return df
+
+def run_config_wrapper(args):
+    config, num_runs, tmax = args
+    return run_config(config, num_runs, tmax)
+
+def iterate_configs(configs, num_runs, tmax):
+    # Create list of dictionaries as product of dictionary of lists
+    configs = list(product_dict(configs))
+    args = [(config, num_runs, tmax) for config in configs]
+
+    # Create iterator function
+    #def foo(config):
+    #    return run_config(config, num_runs, tmax)
+
+    ti = time.time()
+
+    # Extract results from multiple runs in parallel
+    mw = 4
+
+
+    with ProcessPoolExecutor(max_workers=mw) as executor:
+        try:
+            # Iterate each config
+            _ = list(tqdm(executor.map(run_config_wrapper, args),
+                          total=len(configs), 
+                          desc="Iterating configs", 
+                          position=0, 
+                          leave=False))
+        except KeyboardInterrupt:
+            executor.shutdown(wait=False, cancel_futures=True)
+            print('KeyboardInterrupt 1')
+
+    tf = time.time()
+    dt = tf - ti
+    hours, rem = divmod(dt, 3600)
+    minutes, seconds = divmod(rem, 60)
+    print(f"Time taken: {int(hours)}h {int(minutes)}m {seconds:.2f}s")

@@ -1,32 +1,71 @@
-import numpy as np
+from concurrent.futures import ProcessPoolExecutor
+from metric_collector import run_config
+from src.utils import product_dict
+from tqdm import tqdm
+from pprint import pprint
+import sys, os
+import time
 
-# Your list of lists
-data = [[1, 2, 3], [2, 10, 20]]
+# Create configurations for the experiments
+num_runs = 1
+tmax = 1
+configs0 = {
+    "experiment": ["tiger", "robot", "gridworld"],
+    "discount": [0.9],
+    "horizon": [2],
+    "c_sample": [5, 15, 50, 100],
+    "r_sample": [250]
+}
 
-# Convert the list of lists to a numpy array for easy cumulative sum operation
-data_array = np.array(data)
+configs0 = {
+    "experiment": ["tiger"],
+    "discount": [0.9],
+    "horizon": [2],
+    "c_sample": [5],
+    "r_sample": [250]
+}
 
-# Calculate the cumulative sum along the rows (axis=0)
-cumulative_sums = np.cumsum(data_array, axis=0)
+# Create list of dictionaries as product of dictionary of lists
+configs = list(product_dict(configs0))
 
-# Convert back to a list of lists
-cumulative_sums_list = cumulative_sums.tolist()
+# Create iterator function
+def foo(config):
+    return run_config(config, num_runs, tmax)
 
-def get_csamples_from_dictstr(dstr):
-    import re
-    pattern = r"\'c_samples\':\s*(\d+)"
-    match = re.search(pattern, dstr)
+if __name__ == "__main__":
+    # Extract results from multiple runs in parallel
+    mw = 2
+    print(f"> Max workers = {mw}.")
+    print("> Configs:")
+    pprint(configs0)
+    print("__________________")
 
-    assert match
-    c_samples = int(match.group(1))  
-    return c_samples
+if __name__ == "__main__":
+    ti = time.time()
 
-text = "{'experiment': 'A', 'discount': 0.9, 'horizon': 100, 'c_samples': 10, 'r_samples': 5}"
+    # Extract results from multiple runs in parallel
+    mw = 4
+    print(f"> Max workers = {mw}.")
+    print("> Configs:")
+    pprint(configs0)
+    print("__________________")
 
-r = get_csamples_from_dictstr(text)
-# print(r)
+    with ProcessPoolExecutor(max_workers=mw) as executor:
+        try:
+            # Iterate each config
+            _ = list(tqdm(executor.map(foo, configs),
+                          total=len(configs),
+                          desc="Iterating configs",
+                          position=0,
+                          leave=False))
+        except KeyboardInterrupt:
+            executor.shutdown(wait=False, cancel_futures=True)
+            print('KeyboardInterrupt 1')
 
-s = "Group {'experiment': 'tiger', 'discount': 0.9, 'horizon': 3, 'c_samples': 100, 'r_samples': 250}"
-import ast
-d = ast.literal_eval(s[6:])
-print(d)
+    tf = time.time()
+    dt = tf - ti
+    hours, rem = divmod(dt, 3600)
+    minutes, seconds = divmod(rem, 60)
+    print(f"Time taken: {int(hours)}h {int(minutes)}m {seconds:.2f}s")
+    files.download('results.csv')
+

@@ -30,6 +30,8 @@ class BayesianNetwork:
         self.node_queue: list[Id] = None
         
         self.old = old
+
+        self.quantum = False
         
     def get_node_queue(self) -> list[Id]:
         return self.node_queue
@@ -198,7 +200,7 @@ class BayesianNetwork:
         return sample_df
 
     def query(self, query: list[Id], evidence: dict[Id, Evidence] = None, 
-              n_samples: int = 100) -> pd.DataFrame:
+              n_samples: int = 100, quantum = True, print_pe = False) -> pd.DataFrame:
         """
         Applies the rejection sampling algorithm to approximate any probability distribution.
 
@@ -212,6 +214,11 @@ class BayesianNetwork:
         
         if self.old:
             return self.query_old(query, evidence, n_samples)
+        if self.quantum and quantum:
+            # Second flag: avoid infinite recursion in the case qquery calls
+            # query because there's no need to run the quantum version. 
+            # (post 15/03/25). 
+            return self.qquery(query, evidence, n_samples, print_pe = print_pe)
         
         samples = []
         evidence = {} if evidence is None else evidence
@@ -248,9 +255,21 @@ class BayesianNetwork:
         return sample_df
         
     def joint_prob(self, d):
+        # d: dictionary with the evidence
         P = 1
+        print("d", d)
         for node in list(d.keys()):
+            print("Node", node)
             P *= self.cond_prob(node, d)  
+            print("P", P)
+            '''
+            if not isinstance(d[node], pd.DataFrame):
+                print("Node", node)
+                P *= self.cond_prob(node, d)  
+                print("P", P)
+            else:
+                print("Ev val was dataframe")
+            '''
         return P
             
     def cond_prob(self, node, d):
@@ -258,6 +277,8 @@ class BayesianNetwork:
         ids = list(d.keys())
         vals = [d[var] for var in ids]
         parents = self.get_parents(node)
+        # Topological order.
+        parents = [node for node in self.node_queue if node in parents]
         
         # If a parent with higher topological order is specified, no need for 
         # other. Can find path to calculate probability without it.
@@ -277,12 +298,12 @@ class BayesianNetwork:
             else:
               ps, pvals = [], []
             
-            cp = self.cond_prob_aux(node, val, parents, pvals)
+            cp = self.cond_prob_aux(node, val, ps, pvals)
             return cp
         else:
             # Need recursivity to consider possible parent values.
-            tparents = [node for node in self.node_queue if node in parents]
-            parent = tparents[0]
+            # tparents = [node for node in self.node_queue if node in parents]
+            parent = parents[0]
             vals = [0, 1]
             
             ds = [deepcopy(d) for val in vals]
@@ -298,9 +319,19 @@ class BayesianNetwork:
     def cond_prob_aux(self, node, nval, parents, pvals):
         # P(node|parents) where all parent values specified. Works for no parents.
         df = self.get_pt(node)
+        '''
+        if df is None: 
+            return 1
+            print("Check this!")
+        '''
         lnodes = parents + [node]
         lvals = pvals + [nval]
+        # print("df", df)
+        # print("lnodes", lnodes)
+        # print("df[lnodes]", df[lnodes])
+        # print("lvals", lvals)
         cP = df.loc[(df[lnodes] == lvals).all(axis = 1), 'Prob']
+        # print("cP", cP)
         cP = cP.iat[0]
         return cP
         

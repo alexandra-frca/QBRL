@@ -21,6 +21,8 @@ class QuantumBayesianNetwork(BN):
     def initialize(self):
         # Initialize DDN parent class
         super().initialize()
+
+        self.quantum = True
         
         # Define Random Variable (DiscreteNode) to qubit dict
         self.rv_qubits = self.get_rv_qubit_dict()
@@ -361,14 +363,20 @@ class QuantumBayesianNetwork(BN):
         # print("> Prob success should be: ", 100*np.sin((2*m+1)*theta)**2)
         return m
     
-    def qquery(self, query: list[Id], evidence: dict[Id, Value], n_samples: int, qiskit = False) -> pd.DataFrame:
+    def qquery(self, query: list[Id], evidence: dict[Id, Value], n_samples: int, useqiskit = False, print_pe = False) -> pd.DataFrame:
         # qiskit: whether to run the circuits using Qiskit, or simulate them 
         # classically.
         
         if self.old:
             return self.query_old(query, evidence, n_samples)
-        if not qiskit:
-            return self.query(query, evidence, n_samples)
+        if not useqiskit:
+            if print_pe:
+                backup_pts = self.encode_evidence(evidence)
+                Pe = self.joint_prob(evidence)
+                print("\nEvidence: ", evidence)
+                print("\nP(e)", Pe, "\n")
+                self.decode_evidence(backup_pts)
+            return self.query(query, evidence, n_samples, quantum = False)
         
         # Replace QSearch with calculation of P(e).
         Pe = self.joint_prob(evidence)

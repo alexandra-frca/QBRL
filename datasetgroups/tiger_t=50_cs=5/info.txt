@@ -1,0 +1,9 @@
+num_runs = 10
+tmax = 50
+configs0 = {
+    "experiment": ["tiger"],
+    "discount": [0.9],
+    "horizon": [2],
+    "c_sample": [5],
+    "r_sample": [250]
+}
