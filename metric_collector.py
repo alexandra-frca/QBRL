@@ -166,7 +166,14 @@ def run_config(config, num_runs, time, save = True):
     if save:
         timestamp = datetime.now(pytz.timezone('Japan')).strftime("%d_%m_%Y_%H_%M")
         filename = f"datasets/results_{timestamp}.csv"
-        df.to_csv(filename, index=False)
+
+        # Save to datasets folder if it exists, otherwise to current folder.
+        if os.path.exists('datasets') and os.path.isdir('datasets'):
+            filepath = os.path.join('datasets', filename)
+        else:
+            filepath = filename
+
+        df.to_csv(filepath, index=False)
     return df
 
 def run_config_wrapper(args):
