@@ -170,8 +170,10 @@ def run_config(config, num_runs, time, save = True):
         # Save to datasets folder if it exists, otherwise to current folder.
         if os.path.exists('datasets') and os.path.isdir('datasets'):
             filepath = os.path.join('datasets', filename)
+            print("> Saved file to datasets folder.")
         else:
             filepath = filename
+            print("> Saved file.")
 
         df.to_csv(filepath, index=False)
     return df
