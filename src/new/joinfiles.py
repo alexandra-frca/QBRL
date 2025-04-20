@@ -10,7 +10,9 @@ def combine_dataset_files(foldername):
     dfs = read_csvs_from_folder(foldername)
     df = combine_datasets(dfs)
     nruns = list(df["run"])[-1] + 1
-    df.to_csv(f'datasets/{foldername}_nruns={nruns}.csv', index=False)
+    filename = f"{foldername}_nruns={nruns}.csv"
+    df.to_csv(f'datasets/{filename}', index=False)
+    print(f"> Saved combinet dataset into datasets/{filename}.")
 
 def read_csvs_from_folder(foldername):
     folder_path = 'datasetgroups/' + foldername

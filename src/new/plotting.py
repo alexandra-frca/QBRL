@@ -225,8 +225,8 @@ df = df[
 df['reward_diff'] = df['q_r'] - df['r']'''
 
 if __name__ == "__main__":
-    df = pd.read_csv('datasets/tiger_t=50_cs=5_nruns=70.csv')
-    df = pd.read_csv('resultsg.csv')
+    df = pd.read_csv('datasets/tiger_t=50_cs=5_nruns=100.csv')
+    # df = pd.read_csv('resultsg.csv')
     # conds = {'experiment': 'tiger', 'horizon': 2, "c_sample": 5}
 
     plot_crd(df)
