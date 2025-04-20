@@ -39,16 +39,17 @@ def process_data(df, which_diff):
 
     return newdatasets
 
-def plot_diff_evol(datasets, which_diff, conds = None, trange = "biggest"):
+def plot_diff_evol(datasets, which_diff, conds = None, trange = "smallest"):
     # trange: whether to fit the xaxis range to smallest/biggest among datasets.
     assert trange in ["smallest", "biggest"]
     plt.figure(figsize=(10, 6))
     lts = []
-    for dataset in datasets:
-        times = plot_dataset(dataset, conds)
+    for i, dataset in enumerate(datasets):
+        colors = ['firebrick', 'darkblue']
+        color = colors[i]
+        times = plot_dataset(dataset, conds, color)
         lts.append(times)
 
-    print("A", lts[0].min())
     mintimes = [min(ts) for ts in lts]
     maxtimes = [max(ts) for ts in lts]
 
@@ -56,26 +57,24 @@ def plot_diff_evol(datasets, which_diff, conds = None, trange = "biggest"):
     if trange == "smallest":
         plt.xlim(max(mintimes), min(maxtimes))
     else:
-        print(mintimes)
         plt.xlim(min(mintimes), max(maxtimes))
 
-    plt.xlabel('Time', fontsize=13)
-    plt.ylabel(f'Cumulative {which_diff} difference', fontsize=13)
+    plt.xlabel('Time', fontsize="large")
+    plt.ylabel(f'Cumulative {which_diff} difference', fontsize="large")
     plt.tight_layout()
     plt.grid(True, linestyle='--', linewidth=0.3, alpha=0.7)
 
     if len(datasets) > 1:
-        plt.legend(loc='best', fontsize='small')
+        plt.legend(loc='best', fontsize='large')
 
     plt.show()
 
-def plot_dataset(dataset, conds):
+def plot_dataset(dataset, conds, color):
     for key, (times, avgs, stds) in dataset.items():
         d = ast.literal_eval(key[6:])
         if conds is None or all(d[key] == conds[key] for key in conds):
-            label = f"{d['experiment']}, c_samples = {d['c_sample']}" 
+            label = f"{d['experiment']} problem, c_samples = {d['c_sample']}" 
 
-            color = '#ff7f0e' if which_diff == "reward" else '#2ca02c'
             plt.plot(times, avgs, label=label, color = color, linewidth=1)
             plt.fill_between(
                 times,
@@ -211,21 +210,26 @@ df = df[
 ]
 df['reward_diff'] = df['q_r'] - df['r']'''
 
-def read_datasets_from_files(filenames):
+def read_datasets_from_files(filenames = None):
+    import os
+    folder = "datasets/"
+    if filenames is None: 
+        filenames = os.listdir(folder)
+
     dfs = []
-    for name in filenames: 
-        df = pd.read_csv('datasets/' + name + '.csv')
+    for file in filenames: 
+        df = pd.read_csv(folder + file)
         dfs.append(df)
     return dfs
 
 
 if __name__ == "__main__":
-    filenames = ['tiger_t=50_cs=5_nruns=100']#, 
-                 #"robot_t=5_cs=50_nruns=3"]
-    dfs = read_datasets_from_files(filenames)
+    # filenames = ['tiger_t=50_cs=5_nruns=100.csv', 
+    #             "gridworld_t=10_cs=50_nruns=1.csv"] 
     # dfs = [pd.read_csv('resultsg.csv')]
     # conds = {'experiment': 'tiger', 'horizon': 2, "c_sample": 5}
 
-    which = 1
+    dfs = read_datasets_from_files()
+    which = 0
     which_diff = 'reward' if which == 0 else 'cost'
     plot_diff_evol_from_dfs(dfs, which_diff)
