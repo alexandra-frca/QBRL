@@ -5,8 +5,12 @@ from collections import defaultdict
 import ast
 from pprint import pprint
 
-def plot_crd(df, which_diff, conds = None, unc = "std", silent = True):
+def plot_diff_evol_from_dfs(dfs, which_diff, conds = None, unc = "std"):
     assert which_diff in ["reward", "cost"]
+    datasets = [process_data(df, which_diff) for df in dfs]
+    plot_diff_evol(datasets, which_diff, conds)
+
+def process_data(df, which_diff):
     if which_diff == "reward":
         df[which_diff] = df['q_r'] - df['r']
     elif which_diff == "cost":
@@ -15,7 +19,7 @@ def plot_crd(df, which_diff, conds = None, unc = "std", silent = True):
     # Group runs with the same problem variables. 
     group_cols = ['experiment', 'discount', 'horizon', 'c_sample', 'r_sample']
 
-    results = {}
+    newdatasets = {}
     for key, group in df.groupby(group_cols):
         key = dict_to_str(key, group_cols)
 
@@ -30,31 +34,46 @@ def plot_crd(df, which_diff, conds = None, unc = "std", silent = True):
 
         cr = accumulate(diffs_list)
         
-        '''
-        print("Number of runs: ", len(cr[0]))
-        print("> Cumulative reward differences: ")
-        for i,l in enumerate(cr): 
-            print(f"t={i} (average = {round(np.mean(l), 2)}): ", list(round(x, 1) for x in l))
-        '''
         avgs, stds = get_avgs_stds(cr)
-        results[key] = (ts, avgs, stds)
-        # results[key_str] = (time_series, reward_diffs_list)
-    
-    plot_crd_aux(results, which_diff, conds)
+        newdatasets[key] = (ts, avgs, stds) 
 
-def plot_crd_aux(results, which_diff, conds = None):
+    return newdatasets
+
+def plot_diff_evol(datasets, which_diff, conds = None, trange = "biggest"):
+    # trange: whether to fit the xaxis range to smallest/biggest among datasets.
+    assert trange in ["smallest", "biggest"]
     plt.figure(figsize=(10, 6))
+    lts = []
+    for dataset in datasets:
+        times = plot_dataset(dataset, conds)
+        lts.append(times)
 
-    first = True
-    for key, (times, avgs, stds) in results.items():
+    print("A", lts[0].min())
+    mintimes = [min(ts) for ts in lts]
+    maxtimes = [max(ts) for ts in lts]
+
+    # Plot common range.
+    if trange == "smallest":
+        plt.xlim(max(mintimes), min(maxtimes))
+    else:
+        print(mintimes)
+        plt.xlim(min(mintimes), max(maxtimes))
+
+    plt.xlabel('Time', fontsize=13)
+    plt.ylabel(f'Cumulative {which_diff} difference', fontsize=13)
+    plt.tight_layout()
+    plt.grid(True, linestyle='--', linewidth=0.3, alpha=0.7)
+
+    if len(datasets) > 1:
+        plt.legend(loc='best', fontsize='small')
+
+    plt.show()
+
+def plot_dataset(dataset, conds):
+    for key, (times, avgs, stds) in dataset.items():
         d = ast.literal_eval(key[6:])
         if conds is None or all(d[key] == conds[key] for key in conds):
-            if first:
-                # print("> Plotting: ")
-                # pprint(d)
-                first = False
-
-            label = f"c_sample = {d['c_sample']}" 
+            label = f"{d['experiment']}, c_samples = {d['c_sample']}" 
 
             color = '#ff7f0e' if which_diff == "reward" else '#2ca02c'
             plt.plot(times, avgs, label=label, color = color, linewidth=1)
@@ -66,15 +85,7 @@ def plot_crd_aux(results, which_diff, conds = None):
                 alpha=0.2,
                 edgecolor=None
             )
-
-    plt.xlim(times.min(), times.max())
-    plt.xlabel('Time', fontsize=13)
-    plt.ylabel(f'Cumulative {which_diff} difference', fontsize=13)
-    plt.tight_layout()
-    plt.grid(True, linestyle='--', linewidth=0.3, alpha=0.7)
-    # plt.legend(loc='best', fontsize='small')
-
-    plt.show()
+    return times
 
 def dict_to_str(key, names):
     '''
@@ -200,12 +211,21 @@ df = df[
 ]
 df['reward_diff'] = df['q_r'] - df['r']'''
 
+def read_datasets_from_files(filenames):
+    dfs = []
+    for name in filenames: 
+        df = pd.read_csv('datasets/' + name + '.csv')
+        dfs.append(df)
+    return dfs
+
+
 if __name__ == "__main__":
-    df = pd.read_csv('datasets/tiger_t=50_cs=5_nruns=100.csv')
-    # df = pd.read_csv('resultsg.csv')
+    filenames = ['tiger_t=50_cs=5_nruns=100']#, 
+                 #"robot_t=5_cs=50_nruns=3"]
+    dfs = read_datasets_from_files(filenames)
+    # dfs = [pd.read_csv('resultsg.csv')]
     # conds = {'experiment': 'tiger', 'horizon': 2, "c_sample": 5}
 
     which = 1
     which_diff = 'reward' if which == 0 else 'cost'
-    plot_crd(df, which_diff)
-    # plot_crd(df, conds)
+    plot_diff_evol_from_dfs(dfs, which_diff)
