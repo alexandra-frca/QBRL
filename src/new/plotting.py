@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -210,18 +211,25 @@ df = df[
 ]
 df['reward_diff'] = df['q_r'] - df['r']'''
 
-def read_datasets_from_files(filenames = None):
-    import os
-    folder = "datasets/"
-    if filenames is None: 
-        filenames = os.listdir(folder)
-
+def read_datasets_from_files(filenames, folder = "datasets/"):
     dfs = []
     for file in filenames: 
         df = pd.read_csv(folder + file)
         dfs.append(df)
     return dfs
 
+def dfs_from_folder(folder):
+    filenames = os.listdir(folder)
+    dfs = []
+    for file in filenames: 
+        df = pd.read_csv(folder + '/' + file)
+        dfs.append(df)
+    return dfs
+
+def all_plots_from_folder(folder):
+    dfs = dfs_from_folder(folder)
+    for which_diff in ['reward', 'cost']:
+        plot_diff_evol_from_dfs(dfs, which_diff)
 
 if __name__ == "__main__":
     # filenames = ['tiger_t=50_cs=5_nruns=100.csv', 
@@ -229,7 +237,9 @@ if __name__ == "__main__":
     # dfs = [pd.read_csv('resultsg.csv')]
     # conds = {'experiment': 'tiger', 'horizon': 2, "c_sample": 5}
 
-    dfs = read_datasets_from_files()
+    folder = 'datasets'
+    # all_plots_from_folder(folder)
+    dfs = dfs_from_folder(folder)
     which = 0
     which_diff = 'reward' if which == 0 else 'cost'
     plot_diff_evol_from_dfs(dfs, which_diff)
