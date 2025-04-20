@@ -5,8 +5,12 @@ from collections import defaultdict
 import ast
 from pprint import pprint
 
-def plot_crd(df, conds = None, unc = "std", silent = True):
-    df['reward_diff'] = df['q_r'] - df['r']
+def plot_crd(df, which_diff, conds = None, unc = "std", silent = True):
+    assert which_diff in ["reward", "cost"]
+    if which_diff == "reward":
+        df[which_diff] = df['q_r'] - df['r']
+    elif which_diff == "cost":
+        df[which_diff] = df['c_sample']*(df['c_l']/df['q_l'] - 1)
 
     # Group runs with the same problem variables. 
     group_cols = ['experiment', 'discount', 'horizon', 'c_sample', 'r_sample']
@@ -16,15 +20,15 @@ def plot_crd(df, conds = None, unc = "std", silent = True):
         key = dict_to_str(key, group_cols)
 
         ts = group['t'].unique()
-        reward_diffs_by_time = {}
+        diffs_by_time = {}
 
         # Collect reward differences for each time t
         for t, sub_group in group.groupby('t'):
-            reward_diffs_by_time[t] = sub_group['reward_diff'].tolist()  
+            diffs_by_time[t] = sub_group[which_diff].tolist()  
             
-        reward_diffs_list = [reward_diffs_by_time[t] for t in ts]
+        diffs_list = [diffs_by_time[t] for t in ts]
 
-        cr = accumulate(reward_diffs_list)
+        cr = accumulate(diffs_list)
         
         '''
         print("Number of runs: ", len(cr[0]))
@@ -35,68 +39,40 @@ def plot_crd(df, conds = None, unc = "std", silent = True):
         avgs, stds = get_avgs_stds(cr)
         results[key] = (ts, avgs, stds)
         # results[key_str] = (time_series, reward_diffs_list)
+    
+    plot_crd_aux(results, which_diff, conds)
 
-    if conds is None: 
-        plot_crd_aux(results)
-    else:
-        plot_crd_aux_conditional(results, conds)
-
-    if not silent:
-        for key, (times, avgs, stds) in results.items():
-            print(key)
-            print(f"{key}")  # Readable group name
-            print(f"Times: {times}")
-            print(f"Average reward Differences by Time: {avgs}")
-            print()
-
-def plot_crd_aux(results):
-    plt.figure(figsize=(10, 6))
-
-    for key, (times, avgs, stds) in results.items():
-        d = ast.literal_eval(key[6:])
-        label = f"c_sample = {d['c_sample']}" 
-        plt.plot(times, avgs, label = label)
-        plt.fill_between(
-            times,
-            avgs - stds,
-            avgs + stds,
-            alpha=0.2
-        )
-
-    # Formatting the plot
-    plt.xlabel('Time (t)')
-    plt.ylabel('Cumulative Reward Difference')
-    plt.title('Cumulative Reward Difference Over Time')
-    plt.legend(loc='best', fontsize='small')
-
-    plt.show()
-
-def plot_crd_aux_conditional(results, conds):
+def plot_crd_aux(results, which_diff, conds = None):
     plt.figure(figsize=(10, 6))
 
     first = True
     for key, (times, avgs, stds) in results.items():
         d = ast.literal_eval(key[6:])
-        if all(d[key] == conds[key] for key in conds):
+        if conds is None or all(d[key] == conds[key] for key in conds):
             if first:
                 # print("> Plotting: ")
                 # pprint(d)
                 first = False
 
             label = f"c_sample = {d['c_sample']}" 
-            plt.plot(times, avgs, label=label)
+
+            color = '#ff7f0e' if which_diff == "reward" else '#2ca02c'
+            plt.plot(times, avgs, label=label, color = color, linewidth=1)
             plt.fill_between(
                 times,
                 avgs - stds,
                 avgs + stds,
-                alpha=0.2
+                color = color,
+                alpha=0.2,
+                edgecolor=None
             )
 
-    # Formatting the plot
-    plt.xlabel('Time (t)')
-    plt.ylabel('Cumulative Reward Difference')
-    plt.title('Cumulative Reward Difference Over Time')
-    plt.legend(loc='best', fontsize='small')
+    plt.xlim(times.min(), times.max())
+    plt.xlabel('Time', fontsize=13)
+    plt.ylabel(f'Cumulative {which_diff} difference', fontsize=13)
+    plt.tight_layout()
+    plt.grid(True, linestyle='--', linewidth=0.3, alpha=0.7)
+    # plt.legend(loc='best', fontsize='small')
 
     plt.show()
 
@@ -229,5 +205,7 @@ if __name__ == "__main__":
     # df = pd.read_csv('resultsg.csv')
     # conds = {'experiment': 'tiger', 'horizon': 2, "c_sample": 5}
 
-    plot_crd(df)
+    which = 1
+    which_diff = 'reward' if which == 0 else 'cost'
+    plot_crd(df, which_diff)
     # plot_crd(df, conds)
