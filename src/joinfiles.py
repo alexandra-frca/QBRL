@@ -39,5 +39,5 @@ def combine_datasets(dfs):
     return combined_df
 
     
-foldername = 'tiger_t=50_cs=5'
+foldername = 'robot_t=50_cs=50'
 combine_dataset_files(foldername)

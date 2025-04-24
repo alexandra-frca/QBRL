@@ -5,6 +5,7 @@ import numpy as np
 from collections import defaultdict
 import ast
 from pprint import pprint
+from src.utils import dfs_from_folder, read_datasets_from_files
 
 def plot_diff_evol_from_dfs(dfs, which_diff, conds = None, unc = "std"):
     assert which_diff in ["reward", "cost"]
@@ -15,7 +16,7 @@ def process_data(df, which_diff):
     if which_diff == "reward":
         df[which_diff] = df['q_r'] - df['r']
     elif which_diff == "cost":
-        df[which_diff] = df['c_sample']*(df['c_l']/df['q_l'] - 1)
+        df[which_diff] = (df['q_l']/df['c_l'] - 1)#*df['c_sample']
 
     # Group runs with the same problem variables. 
     group_cols = ['experiment', 'discount', 'horizon', 'c_sample', 'r_sample']
@@ -35,20 +36,20 @@ def process_data(df, which_diff):
 
         cr = accumulate(diffs_list)
         
-        avgs, stds = get_avgs_stds(cr)
-        newdatasets[key] = (ts, avgs, stds) 
+        avgs, rg = get_avgs_shade(cr)
+        newdatasets[key] = (ts, avgs, rg) 
 
     return newdatasets
 
-def plot_diff_evol(datasets, which_diff, conds = None, trange = "smallest"):
+def plot_diff_evol(datasets, which_diff, conds = None, trange = "standard"):
     # trange: whether to fit the xaxis range to smallest/biggest among datasets.
-    assert trange in ["smallest", "biggest"]
-    plt.figure(figsize=(10, 6))
+    # assert trange in ["smallest", "largest"]
+    plt.figure(figsize=(10, 8))
     lts = []
     for i, dataset in enumerate(datasets):
-        colors = ['firebrick', 'darkblue']
+        colors = ['tomato', 'seagreen'] 
         color = colors[i]
-        times = plot_dataset(dataset, conds, color)
+        times = plot_dataset(dataset, conds, color, which_diff)
         lts.append(times)
 
     mintimes = [min(ts) for ts in lts]
@@ -56,33 +57,66 @@ def plot_diff_evol(datasets, which_diff, conds = None, trange = "smallest"):
 
     # Plot common range.
     if trange == "smallest":
-        plt.xlim(max(mintimes), min(maxtimes))
-    else:
-        plt.xlim(min(mintimes), max(maxtimes))
+        xmin, xmax = max(mintimes), min(maxtimes)
+    #else:
+    #    xmin, xmax = min(mintimes), max(maxtimes)
+        plt.xlim(xmin, xmax)
+        adjust_ylim(xmin, xmax)
 
-    plt.xlabel('Time', fontsize="large")
-    plt.ylabel(f'Cumulative {which_diff} difference', fontsize="large")
+    FONTSIZE = 20
+    plt.xlabel('Time', fontsize=FONTSIZE)
+    plt.ylabel(f'Cumulative {which_diff} difference', fontsize=FONTSIZE)
     plt.tight_layout()
-    plt.grid(True, linestyle='--', linewidth=0.3, alpha=0.7)
+    plt.minorticks_on()
+    plt.grid(True, which='major', linestyle='-', linewidth=0.5, alpha=0.7)
+    plt.grid(True, which='minor', linestyle='--', linewidth=0.2, alpha=0.4)
 
     if len(datasets) > 1:
-        plt.legend(loc='best', fontsize='large')
+        plt.legend(loc='best', fontsize=FONTSIZE)
 
     plt.show()
 
-def plot_dataset(dataset, conds, color):
-    for key, (times, avgs, stds) in dataset.items():
+def adjust_ylim(xmin, xmax):
+    ys_keep = []
+    for line in plt.gca().get_lines():
+        xdata = line.get_xdata()
+        ydata = line.get_ydata()
+        for x, y in zip(xdata, ydata):
+            if xmin <= x <= xmax:
+                ys_keep.append(y)
+
+    from matplotlib.collections import PolyCollection
+    for patch in plt.gca().collections:
+        if isinstance(patch, PolyCollection):
+            for path in patch.get_paths():
+                vertices = path.vertices
+                xdata = vertices[:, 0]
+                ydata = vertices[:, 1]
+                for x, y in zip(xdata, ydata):
+                    if xmin <= x <= xmax:
+                        ys_keep.append(y)
+
+    if ys_keep:
+        ymin = min(ys_keep)
+        ymax = max(ys_keep)
+        plt.ylim(ymin, ymax)
+
+def plot_dataset(dataset, conds, color, which_diff):
+    for key, (times, avgs, rg) in dataset.items():
         d = ast.literal_eval(key[6:])
         if conds is None or all(d[key] == conds[key] for key in conds):
-            label = f"{d['experiment']} problem, c_samples = {d['c_sample']}" 
+            label = f"{d['experiment']} problem"
+            if which_diff == "reward":
+                label += f", c_samples = {d['c_sample']}" 
 
-            plt.plot(times, avgs, label=label, color = color, linewidth=1)
+            plt.plot(times, avgs, label=label, color = color, linestyle='--',
+                     linewidth=1, marker='o', markersize=5)
             plt.fill_between(
                 times,
-                avgs - stds,
-                avgs + stds,
+                rg[0], #[rg[0] for rg in rgs],
+                rg[1], # [rg[1] for rg in rgs],
                 color = color,
-                alpha=0.2,
+                alpha=0.1,
                 edgecolor=None
             )
     return times
@@ -119,11 +153,16 @@ def accumulate(data):
     csums = csums.tolist()
     return csums
 
-def get_avgs_stds(list_of_lists):
+def get_avgs_shade(list_of_lists, shaded = "std"):
+    assert shaded in ["std", "iqr"]
     data = np.array(list_of_lists)
     avgs = np.mean(data, axis=1)
-    stds = np.std(data, axis=1)
-    return avgs, stds
+    if shaded == "std":
+        std = np.std(data, axis=1)
+        rg = avgs - std, avgs + std
+    elif shaded == "iqr":
+        rg = np.percentile(data, 25, axis=1), np.percentile(data, 75, axis=1) 
+    return avgs, rg
 
 def get_csample_from_dictstr(dstr):
     import re
@@ -196,50 +235,25 @@ testdata2 = {
     'q_r': [0.7, 0.8, 0.5, 0.8, 0.9, 1.0],
 }
 
-# pd.set_option('display.max_columns', None)
-# pd.set_option('display.max_rows', None)
-
-
-
-'''
-df = df[
-    (df['experiment'] == 'tiger') &
-    (df['horizon'] == 2) &
-    (df['c_sample'] == 5) &
-    (df['t'] < 10) &
-    (df['run'] < 3)
-]
-df['reward_diff'] = df['q_r'] - df['r']'''
-
-def read_datasets_from_files(filenames, folder = "datasets/"):
-    dfs = []
-    for file in filenames: 
-        df = pd.read_csv(folder + file)
-        dfs.append(df)
-    return dfs
-
-def dfs_from_folder(folder):
-    filenames = os.listdir(folder)
-    dfs = []
-    for file in filenames: 
-        df = pd.read_csv(folder + '/' + file)
-        dfs.append(df)
-    return dfs
-
-def all_plots_from_folder(folder):
+def diff_plots_from_folder(folder):
     dfs = dfs_from_folder(folder)
     for which_diff in ['reward', 'cost']:
         plot_diff_evol_from_dfs(dfs, which_diff)
 
 if __name__ == "__main__":
-    # filenames = ['tiger_t=50_cs=5_nruns=100.csv', 
-    #             "gridworld_t=10_cs=50_nruns=1.csv"] 
-    # dfs = [pd.read_csv('resultsg.csv')]
+    filenames = ["robot_t=20_cs=50_nruns=90.csv"]#,
+                 #'tiger_t=50_cs=5_nruns=100.csv']
+    
     # conds = {'experiment': 'tiger', 'horizon': 2, "c_sample": 5}
 
-    folder = 'datasets'
-    # all_plots_from_folder(folder)
-    dfs = dfs_from_folder(folder)
+    all_datasets = True
     which = 0
     which_diff = 'reward' if which == 0 else 'cost'
+    folder = 'datasets'
+    if all_datasets: 
+        dfs = dfs_from_folder(folder)
+    else:
+        dfs = read_datasets_from_files(filenames)
     plot_diff_evol_from_dfs(dfs, which_diff)
+    
+    

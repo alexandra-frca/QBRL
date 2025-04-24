@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Testing alterations to Gil's code. 
+Testing alterations to the code. 
 """
 from copy import deepcopy
 

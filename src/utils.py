@@ -3,6 +3,7 @@ from itertools import product
 from typing import Union
 import pandas as pd
 import numpy as np
+import os
 
 # Types
 Id = tuple[str, int]
@@ -93,7 +94,6 @@ def get_avg_reward_and_std(ddn: DDN, reward_node: Id, evidence: dict[Id, Value],
     std = np.sqrt(np.average((avg - rewards)**2, weights=weights))
     return avg, std
 
-##############################################
 from time import perf_counter
 
 class RelativeTimer():
@@ -116,3 +116,30 @@ class RelativeTimer():
             print(f"> Time elapsed: {Dt*1e-3}ms.")
             print(f"  ({round(self.reference/Dt,1)}x faster than the reference.)")
         return Dt
+    
+def dfs_from_folder(folder, return_names = False):
+    filenames = os.listdir(folder)
+    dfs = []
+    for file in filenames: 
+        df = pd.read_csv(folder + '/' + file)
+        dfs.append(df)
+    if return_names: 
+        return dfs, filenames
+    return dfs
+
+def read_datasets_from_files(filenames, folder = "datasets/"):
+    dfs = []
+    for file in filenames: 
+        df = pd.read_csv(folder + file)
+        dfs.append(df)
+    return dfs
+
+def filename_to_title(s):
+    '''
+    E.g. 'robot_t=50_cs=50_nruns=100.csv' -> 'Robot problem (t=50, cs = 50, nruns=100)
+    '''
+    s = s[0].upper() + s[1:]
+    s = s.replace('_', ' problem (', 1)
+    s = s.replace('_', ', ')
+    s = s.replace('.csv', ')')
+    return s
